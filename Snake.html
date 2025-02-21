@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Game with Power-Ups</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #222;
+    }
+    canvas {
+      background: #000;
+      border: 3px solid #fff;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const box = 20;
+    let snake, direction, food, score, highScore, speed, game, countdown, stepCount, gameState;
+    const colors = ["green", "red", "blue", "yellow"];
+
+    highScore = 0;
+
+    // Initialize game: sets variables and draws the start screen
+    function initializeGame() {
+      clearInterval(game);
+      snake = [{ x: 10 * box, y: 10 * box }];
+      direction = "RIGHT";
+      food = generateFood();
+      score = 0;
+      speed = 150;
+      stepCount = 0;
+      countdown = 3;
+      gameState = "start";
+      drawStartScreen();
+    }
+
+    // Create food object that always starts as "green"
+    function generateFood() {
+      return {
+        x: Math.floor(Math.random() * (canvas.width / box)) * box,
+        y: Math.floor(Math.random() * (canvas.height / box)) * box,
+        color: "green"
+      };
+    }
+
+    // Draw the start screen inside the canvas with title, power-up legend, and play button
+    function drawStartScreen() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Background
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Title
+      ctx.fillStyle = "white";
+      ctx.font = "24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Snake Game with Power-Ups", canvas.width / 2, canvas.height / 4);
+      
+      // Power-up legend: draw small colored orbs with effect text
+      const orbSize = 15;
+      const legendY = canvas.height / 4 + 40;
+      const effects = ["Slower", "Faster", "Shrink", "Grow"];
+      const itemSpacing = canvas.width / (colors.length + 1);
+      for (let i = 0; i < colors.length; i++) {
+        let itemX = itemSpacing * (i + 1);
+        // Draw orb icon
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(itemX - orbSize / 2, legendY, orbSize, orbSize);
+        // Draw effect text below the orb
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
+        ctx.fillText(effects[i], itemX, legendY + orbSize + 15);
+      }
+      
+      // Draw Play Button
+      const btnWidth = 120, btnHeight = 50;
+      const btnX = (canvas.width - btnWidth) / 2;
+      const btnY = canvas.height / 2;
+      ctx.fillStyle = "lime";
+      ctx.fillRect(btnX, btnY, btnWidth, btnHeight);
+      ctx.fillStyle = "black";
+      ctx.font = "20px Arial";
+      ctx.fillText("Play", canvas.width / 2, btnY + btnHeight / 2 + 7);
+      
+      // High Score Display
+      ctx.fillStyle = "white";
+      ctx.font = "18px Arial";
+      ctx.fillText("Session High Score: " + highScore, canvas.width / 2, canvas.height - 30);
+    }
+
+    // Draw the countdown screen inside the canvas
+    function drawCountdownScreen() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "white";
+      ctx.font = "48px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(countdown > 0 ? countdown : "GO!", canvas.width / 2, canvas.height / 2);
+    }
+
+    // Draw game over screen (with final score and high score) inside the canvas
+    function drawGameOver() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "red";
+      ctx.font = "48px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 30);
+      ctx.fillStyle = "white";
+      ctx.font = "24px Arial";
+      ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
+      ctx.fillText("Session High Score: " + highScore, canvas.width / 2, canvas.height / 2 + 40);
+    }
+
+    // Draw score on canvas (in the top corners)
+    function drawScore() {
+      ctx.fillStyle = "white";
+      ctx.font = "16px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText("Score: " + score, 10, 20);
+      ctx.textAlign = "right";
+      ctx.fillText("High: " + highScore, canvas.width - 10, 20);
+    }
+
+    // Draw the snake
+    function drawSnake() {
+      ctx.fillStyle = "lime";
+      snake.forEach(segment => ctx.fillRect(segment.x, segment.y, box, box));
+    }
+
+    // Draw the food
+    function drawFood() {
+      ctx.fillStyle = food.color;
+      ctx.fillRect(food.x, food.y, box, box);
+    }
+
+    // Main game function (for the playing state)
+    function drawGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawSnake();
+      drawFood();
+      drawScore();
+
+      // Compute new head position based on the current direction
+      let head = { x: snake[0].x, y: snake[0].y };
+      if (direction === "UP") head.y -= box;
+      if (direction === "DOWN") head.y += box;
+      if (direction === "LEFT") head.x -= box;
+      if (direction === "RIGHT") head.x += box;
+
+      // Check collisions with walls or self BEFORE adding the head
+      if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height || snakeCollision(head)) {
+        clearInterval(game);
+        gameState = "gameover";
+        if (score > highScore) highScore = score;
+        drawGameOver();
+        // Automatically reset to the start screen after 3 seconds
+        setTimeout(() => {
+          initializeGame();
+        }, 3000);
+        return;
+      }
+
+      // Add the new head to the snake
+      snake.unshift(head);
+
+      // Check if food is eaten
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        applyPowerUp(food.color);
+        food = generateFood();
+      } else {
+        snake.pop();
+      }
+
+      // Update stepCount; every 5 steps update food color in fixed order
+      stepCount++;
+      if (stepCount % 5 === 0) {
+        let idx = colors.indexOf(food.color);
+        food.color = colors[(idx + 1) % colors.length];
+      }
+    }
+
+    // Check collision of head with snake body
+    function snakeCollision(head) {
+      return snake.some((segment, index) => index !== 0 && segment.x === head.x && segment.y === head.y);
+    }
+
+    // Apply power-ups based on food color and update game speed accordingly
+    function applyPowerUp(color) {
+      if (color === "green") speed += 20;                 // Slower (increases interval time)
+      if (color === "red") speed = Math.max(50, speed - 10);  // Faster (decreases interval time; cap at 50ms)
+      if (color === "blue" && snake.length > 1) snake.pop();  // Shrink (good)
+      if (color === "yellow") snake.push({ ...snake[snake.length - 1] }); // Grow (bad)
+      clearInterval(game);
+      game = setInterval(drawGame, speed);
+    }
+
+    // Listen for keyboard input to change direction (only during playing)
+    document.addEventListener("keydown", function(event) {
+      if (gameState === "playing") {
+        if (event.key === "ArrowUp" && direction !== "DOWN") direction = "UP";
+        else if (event.key === "ArrowDown" && direction !== "UP") direction = "DOWN";
+        else if (event.key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
+        else if (event.key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
+      }
+    });
+
+    // Handle clicks on the canvas for the Play button on the start screen
+    canvas.addEventListener("click", function(e) {
+      if (gameState === "start") {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const btnWidth = 120, btnHeight = 50;
+        const btnX = (canvas.width - btnWidth) / 2;
+        const btnY = canvas.height / 2;
+        if (x >= btnX && x <= btnX + btnWidth && y >= btnY && y <= btnY + btnHeight) {
+          startCountdown();
+        }
+      }
+    });
+
+    // Start countdown before switching to the playing state
+    function startCountdown() {
+      gameState = "countdown";
+      countdown = 3;
+      let countdownInterval = setInterval(() => {
+        drawCountdownScreen();
+        countdown--;
+        if (countdown < 0) {
+          clearInterval(countdownInterval);
+          gameState = "playing";
+          stepCount = 0;
+          game = setInterval(drawGame, speed);
+        }
+      }, 1000);
+    }
+
+    // Start by initializing the game (which draws the start screen)
+    initializeGame();
+  </script>
+</body>
+</html>
